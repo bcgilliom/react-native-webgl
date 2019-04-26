@@ -34,6 +34,7 @@
 
 - (JSGlobalContextRef)jsContextRef;
 - (void)dispatchBlock:(dispatch_block_t)block queue:(dispatch_queue_t)queue;
+- (void *)runtime;
 
 @end
 
@@ -102,7 +103,22 @@ RCT_NOT_IMPLEMENTED(- (instancetype)init);
           return;
         }
 
-        JSGlobalContextRef jsContextRef = [bridge jsContextRef];
+          JSGlobalContextRef jsContextRef;
+          // RN < 0.58 has a private method that returns the js context
+          if ([bridge respondsToSelector:@selector(jsContextRef)]) {
+              jsContextRef = [bridge jsContextRef];
+          } else {
+              // RN 0.58+ wraps the js context in the jsi abstraction layer,
+              // which doesn't have any way to obtain the JSGlobalContextRef
+              // so engage in some undefined behavior and slurp out the
+              // member variable
+              struct RealmJSCRuntime {
+                  virtual ~RealmJSCRuntime() = 0;
+                  JSGlobalContextRef ctx_;
+              };
+              jsContextRef = static_cast<RealmJSCRuntime*>(bridge.runtime)->ctx_;
+          }
+          
         if (!jsContextRef) {
           RCTLogError(@"RNWebGL: The React Native bridge unexpectedly does not have a JavaScriptCore context.");
           return;
